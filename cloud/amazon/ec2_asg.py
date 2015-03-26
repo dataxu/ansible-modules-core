@@ -67,7 +67,13 @@ options:
       - Number of instances you'd like to replace at a time.  Used with replace_all_instances.
     required: false
     version_added: "1.8"
-    default: 1  
+    default: 1
+  replace_batch_wait:
+    description:
+      - Number of seconds to wait between each batch. Used with replace_all_instances.
+    required: false
+    version_added: "1.9"
+    default: 0
   replace_instances:
     description:
       - List of instance_ids belonging to the named ASG that you would like to terminate and be replaced with instances matching the current launch configuration.
@@ -141,9 +147,9 @@ EXAMPLES = '''
 
 # Rolling ASG Updates
 
-Below is an example of how to assign a new launch config to an ASG and terminate old instances.  
+Below is an example of how to assign a new launch config to an ASG and terminate old instances.
 
-All instances in "myasg" that do not have the launch configuration named "my_new_lc" will be terminated in 
+All instances in "myasg" that do not have the launch configuration named "my_new_lc" will be terminated in
 a rolling fashion with instances using the current launch configuration, "my_new_lc".
 
 This could also be considered a rolling deploy of a pre-baked AMI.
@@ -305,7 +311,7 @@ def elb_dreg(asg_connection, module, group_name, instance_id):
     if wait_timeout <= time.time():
     # waiting took too long
         module.fail_json(msg = "Waited too long for instance to deregister. {0}".format(time.asctime()))
-    
+
 
 
 
@@ -536,6 +542,7 @@ def update_size(group, max_size, min_size, dc):
 
 def replace(connection, module):
     batch_size = module.params.get('replace_batch_size')
+    batch_wait_time = module.params.get('replace_batch_wait')
     wait_timeout = module.params.get('wait_timeout')
     group_name = module.params.get('name')
     max_size =  module.params.get('max_size')
@@ -572,7 +579,7 @@ def replace(connection, module):
     if not old_instances:
         changed = False
         return(changed, props)
-        
+
     # set temporary settings and wait for them to be reached
     # This should get overriden if the number of instances left is less than the batch size.
 
@@ -587,6 +594,8 @@ def replace(connection, module):
         instances = replace_instances
     log.debug("beginning main loop")
     for i in get_chunks(instances, batch_size):
+        if i[0] != instances[0]:
+            time.sleep(batch_wait_time)
         # break out of this loop if we have enough new instances
         break_early, desired_size, term_instances = terminate_batch(connection, module, i, instances, False)
         wait_for_term_inst(connection, module, term_instances)
@@ -614,7 +623,7 @@ def get_instances_by_lc(props, lc_check, initial_instances):
                 new_instances.append(i)
             else:
                 old_instances.append(i)
-        
+
     else:
         log.debug("Comparing initial instances with current: {0}".format(initial_instances))
         for i in props['instances']:
@@ -653,7 +662,7 @@ def terminate_batch(connection, module, replace_instances, initial_instances, le
     lc_check = module.params.get('lc_check')
     decrement_capacity = False
     break_loop = False
-    
+
     as_group = connection.get_all_groups(names=[group_name])[0]
     props = get_properties(as_group)
     desired_size = as_group.min_size
@@ -697,7 +706,7 @@ def terminate_batch(connection, module, replace_instances, initial_instances, le
         elb_dreg(connection, module, group_name, instance_id)
         log.debug("terminating instance: {0}".format(instance_id))
         connection.terminate_instance(instance_id, decrement_capacity=decrement_capacity)
-    
+
     # we wait to make sure the machines we marked as Unhealthy are
     # no longer in the list
 
@@ -733,7 +742,7 @@ def wait_for_term_inst(connection, module, term_instances):
         # waiting took too long
         module.fail_json(msg = "Waited too long for old instances to terminate. %s" % time.asctime())
 
-    
+
 def wait_for_new_inst(module, connection, group_name, wait_timeout, desired_size, prop):
 
     # make sure we have the latest stats after that last loop.
@@ -766,6 +775,7 @@ def main():
             desired_capacity=dict(type='int'),
             vpc_zone_identifier=dict(type='list'),
             replace_batch_size=dict(type='int', default=1),
+            replace_batch_wait=dict(type='int', default=0),
             replace_all_instances=dict(type='bool', default=False),
             replace_instances=dict(type='list', default=[]),
             lc_check=dict(type='bool', default=True),
@@ -777,9 +787,9 @@ def main():
             wait_for_instances=dict(type='bool', default=True)
         ),
     )
-    
+
     module = AnsibleModule(
-        argument_spec=argument_spec, 
+        argument_spec=argument_spec,
         mutually_exclusive = [['replace_all_instances', 'replace_instances']]
     )
 
