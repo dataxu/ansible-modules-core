@@ -305,7 +305,7 @@ def wait_for_elb(asg_connection, module, group_name):
                 # but has not yet show up in the ELB
                 try:
                     lb_instances = elb_connection.describe_instance_health(lb, instances=instances)
-                except boto.exception.InvalidInstance, e:
+                except Exception, e:
                     pass
                 for i in lb_instances:
                     if i.state == "InService":
