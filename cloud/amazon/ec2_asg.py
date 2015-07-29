@@ -306,6 +306,7 @@ def wait_for_elb(asg_connection, module, group_name):
                 try:
                     lb_instances = elb_connection.describe_instance_health(lb, instances=instances)
                 except Exception, e:
+                    module.fail_json(msg=str(e))
                     pass
                 for i in lb_instances:
                     if i.state == "InService":
