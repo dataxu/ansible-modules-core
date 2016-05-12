@@ -342,7 +342,8 @@ def main():
                              stack_policy_body=stack_policy_body,
                              disable_rollback=disable_rollback,
                              template_url=template_url,
-                             capabilities=['CAPABILITY_IAM'])
+                             capabilities=['CAPABILITY_IAM'],
+                             **kwargs)
             operation = 'UPDATE'
         except Exception, err:
             error_msg = boto_exception(err)
